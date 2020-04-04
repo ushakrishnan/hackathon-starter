@@ -9,7 +9,15 @@ block content
     .form-group.row
       label.col-md-3.col-form-label.font-weight-bold.text-right(for='email') Email
       .col-md-7
-        input.form-control(type='email', name='email', id='email', value=user.email, autocomplete='email')
+        input.form-control(type='email', name='email', id='email', value=user.email, autocomplete='email', required)
+      .offset-sm-3.col-md-7.pl-3
+        if user.emailVerified
+          .text-success.font-italic
+            | Verified
+        else
+          .text-danger.font-italic
+            | Unverified: &nbsp;
+            a(href='/account/verify') Send verification email
     .form-group.row
       label.col-md-3.col-form-label.font-weight-bold.text-right(for='name') Name
       .col-md-7
@@ -17,15 +25,17 @@ block content
     .form-group.row
       label.col-md-3.col-form-label.font-weight-bold.text-right Gender
       .col-sm-6
-        label.radio.col-sm-3
-          input(type='radio', checked=user.profile.gender=='male', name='gender', value='male', data-toggle='radio')
-          span Male
-        label.radio.col-sm-3
-          input(type='radio', checked=user.profile.gender=='female', name='gender', value='female', data-toggle='radio')
-          span Female
-        label.radio.col-sm-3
-          input(type='radio', checked=user.profile.gender=='other', name='gender', value='other', data-toggle='radio')
-          span Other
+        .form-check.form-check-inline
+          input(type='radio', class='form-check-input' checked=user.profile.gender == 'male', name='gender', value='male', data-toggle='radio')
+          label.form-check-label Male
+
+        .form-check.form-check-inline
+          input(type='radio', class='form-check-input' checked=user.profile.gender == 'female', name='gender', value='female', data-toggle='radio')
+          label.form-check-label Female
+
+        .form-check.form-check-inline
+          input(type='radio', class='form-check-input' checked=user.profile.gender == 'other', name='gender', value='other', data-toggle='radio')
+          label.form-check-label Other
     .form-group.row
       label.col-md-3.col-form-label.font-weight-bold.text-right(for='location') Location
       .col-md-7
@@ -52,11 +62,11 @@ block content
     .form-group.row
       label.col-md-3.col-form-label.font-weight-bold.text-right(for='password') New Password
       .col-md-7
-        input.form-control(type='password', name='password', id='password', autocomplete='new-password')
+        input.form-control(type='password', name='password', id='password', autocomplete='new-password', minlength='8', required)
     .form-group.row
       label.col-md-3.col-form-label.font-weight-bold.text-right(for='confirmPassword') Confirm Password
       .col-md-7
-        input.form-control(type='password', name='confirmPassword', id='confirmPassword', autocomplete='new-password')
+        input.form-control(type='password', name='confirmPassword', id='confirmPassword', autocomplete='new-password', minlength='8', required)
     .form-group
       .offset-sm-3.col-md-7.pl-2
         button.btn.btn-primary(type='submit')
@@ -93,6 +103,10 @@ block content
         p.mb-1: a.text-danger(href='/account/unlink/facebook') Unlink your Facebook account
       else
         p.mb-1: a(href='/auth/facebook') Link your Facebook account
+      if user.snapchat
+        p.mb-1: a.text-danger(href='/account/unlink/snapchat') Unlink your Snapchat account
+      else
+        p.mb-1: a(href='/auth/snapchat') Link your Snapchat account
     .offset-sm-3.col-md-7.pl-2
       if user.twitter
         p.mb-1: a.text-danger(href='/account/unlink/twitter') Unlink your Twitter account
@@ -113,3 +127,13 @@ block content
         p.mb-1: a.text-danger(href='/account/unlink/steam') Unlink your Steam account
       else
         p.mb-1: a(href='/auth/steam') Link your Steam account
+    .offset-sm-3.col-md-7.pl-2
+      if user.twitch
+        p.mb-1: a.text-danger(href='/account/unlink/twitch') Unlink your Twitch account
+      else
+        p.mb-1: a(href='/auth/twitch') Link your Twitch account
+    .offset-sm-3.col-md-7.pl-2
+      if user.quickbooks
+        p.mb-1: a.text-danger(href='/account/unlink/quickbooks') Unlink your QuickBooks account
+      else
+        p.mb-1: a(href='/auth/quickbooks') Link your QuickBooks account

@@ -1,29 +1,22 @@
 const { promisify } = require('util');
-const request = require('request');
 const cheerio = require('cheerio');
 const graph = require('fbgraph');
 const { LastFmNode } = require('lastfm');
 const tumblr = require('tumblr.js');
-const GitHub = require('@octokit/rest');
+const { Octokit } = require('@octokit/rest');
 const Twit = require('twit');
 const stripe = require('stripe')(process.env.STRIPE_SKEY);
 const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
-const Linkedin = require('node-linkedin')(process.env.LINKEDIN_ID, process.env.LINKEDIN_SECRET, process.env.LINKEDIN_CALLBACK_URL);
 const clockwork = require('clockwork')({ key: process.env.CLOCKWORK_KEY });
 const paypal = require('paypal-rest-sdk');
 const lob = require('lob')(process.env.LOB_KEY);
 const ig = require('instagram-node').instagram();
-const { Venues, Users } = require('node-foursquare')({
-  secrets: {
-    clientId: process.env.FOURSQUARE_ID,
-    clientSecret: process.env.FOURSQUARE_SECRET,
-    redirectUrl: process.env.FOURSQUARE_REDIRECT_URL
-  },
-  foursquare: {
-    mode: 'foursquare',
-    version: 20140806,
-  }
-});
+const axios = require('axios');
+const { google } = require('googleapis');
+const Quickbooks = require('node-quickbooks');
+const validator = require('validator');
+
+Quickbooks.setOauthVersion('2.0');
 
 /**
  * GET /api
@@ -40,23 +33,29 @@ exports.getApi = (req, res) => {
  * Foursquare API example.
  */
 exports.getFoursquare = async (req, res, next) => {
-  const token = req.user.tokens.find(token => token.kind === 'foursquare');
-  try {
-    const getTrendingAsync = promisify(Venues.getTrending);
-    const getVenueAsync = promisify(Venues.getVenue);
-    const getCheckinsAsync = promisify(Users.getCheckins);
-    const trendingVenues = await getTrendingAsync('40.7222756', '-74.0022724', { limit: 50 }, token.accessToken);
-    const venueDetail = await getVenueAsync('49da74aef964a5208b5e1fe3', token.accessToken);
-    const userCheckins = await getCheckinsAsync('self', null, token.accessToken);
-    return res.render('api/foursquare', {
-      title: 'Foursquare API',
-      trendingVenues,
-      venueDetail,
-      userCheckins
+  const token = await req.user.tokens.find((token) => token.kind === 'foursquare');
+  let trendingVenues;
+  let venueDetail;
+  let userCheckins;
+  axios.all([
+    axios.get(`https://api.foursquare.com/v2/venues/trending?ll=40.7222756,-74.0022724&limit=50&oauth_token=${token.accessToken}&v=20140806`),
+    axios.get(`https://api.foursquare.com/v2/venues/49da74aef964a5208b5e1fe3?oauth_token=${token.accessToken}&v=20190113`),
+    axios.get(`https://api.foursquare.com/v2/users/self/checkins?oauth_token=${token.accessToken}&v=20190113`)
+  ])
+    .then(axios.spread((trendingVenuesRes, venueDetailRes, userCheckinsRes) => {
+      trendingVenues = trendingVenuesRes.data.response;
+      venueDetail = venueDetailRes.data.response;
+      userCheckins = userCheckinsRes.data.response;
+      res.render('api/foursquare', {
+        title: 'Foursquare API',
+        trendingVenues,
+        venueDetail,
+        userCheckins
+      });
+    }))
+    .catch((error) => {
+      next(error);
     });
-  } catch (err) {
-    return next(err);
-  }
 };
 
 /**
@@ -64,7 +63,7 @@ exports.getFoursquare = async (req, res, next) => {
  * Tumblr API example.
  */
 exports.getTumblr = (req, res, next) => {
-  const token = req.user.tokens.find(token => token.kind === 'tumblr');
+  const token = req.user.tokens.find((token) => token.kind === 'tumblr');
   const client = tumblr.createClient({
     consumer_key: process.env.TUMBLR_KEY,
     consumer_secret: process.env.TUMBLR_SECRET,
@@ -86,7 +85,7 @@ exports.getTumblr = (req, res, next) => {
  * Facebook API example.
  */
 exports.getFacebook = (req, res, next) => {
-  const token = req.user.tokens.find(token => token.kind === 'facebook');
+  const token = req.user.tokens.find((token) => token.kind === 'facebook');
   graph.setAccessToken(token.accessToken);
   graph.get(`${req.user.facebook}?fields=id,name,email,first_name,last_name,gender,link,locale,timezone`, (err, profile) => {
     if (err) { return next(err); }
@@ -102,18 +101,19 @@ exports.getFacebook = (req, res, next) => {
  * Web scraping example using Cheerio library.
  */
 exports.getScraping = (req, res, next) => {
-  request.get('https://news.ycombinator.com/', (err, request, body) => {
-    if (err) { return next(err); }
-    const $ = cheerio.load(body);
-    const links = [];
-    $('.title a[href^="http"], a[href^="https"]').each((index, element) => {
-      links.push($(element));
-    });
-    res.render('api/scraping', {
-      title: 'Web Scraping',
-      links
-    });
-  });
+  axios.get('https://news.ycombinator.com/')
+    .then((response) => {
+      const $ = cheerio.load(response.data);
+      const links = [];
+      $('.title a[href^="http"], a[href^="https"]').slice(1).each((index, element) => {
+        links.push($(element));
+      });
+      res.render('api/scraping', {
+        title: 'Web Scraping',
+        links
+      });
+    })
+    .catch((error) => next(error));
 };
 
 /**
@@ -121,7 +121,7 @@ exports.getScraping = (req, res, next) => {
  * GitHub API Example.
  */
 exports.getGithub = async (req, res, next) => {
-  const github = new GitHub();
+  const github = new Octokit();
   try {
     const { data: repo } = await github.repos.get({ owner: 'sahat', repo: 'hackathon-starter' });
     res.render('api/github', {
@@ -133,13 +133,17 @@ exports.getGithub = async (req, res, next) => {
   }
 };
 
-/**
- * GET /api/aviary
- * Aviary image processing example.
- */
-exports.getAviary = (req, res) => {
-  res.render('api/aviary', {
-    title: 'Aviary API'
+exports.getQuickbooks = (req, res) => {
+  const token = req.user.tokens.find((token) => token.kind === 'quickbooks');
+
+  const qbo = new Quickbooks(process.env.QUICKBOOKS_CLIENT_ID, process.env.QUICKBOOKS_CLIENT_SECRET,
+    token.accessToken, false, req.user.quickbooks, true, false, null, '2.0', token.refreshToken);
+
+  qbo.findCustomers((_, customers) => {
+    res.render('api/quickbooks', {
+      title: 'Quickbooks API',
+      customers: customers.QueryResponse.Customer
+    });
   });
 };
 
@@ -148,21 +152,19 @@ exports.getAviary = (req, res) => {
  * New York Times API example.
  */
 exports.getNewYorkTimes = (req, res, next) => {
-  const query = {
-    'list-name': 'young-adult',
-    'api-key': process.env.NYT_KEY
-  };
-  request.get({ url: 'http://api.nytimes.com/svc/books/v2/lists', qs: query }, (err, request, body) => {
-    if (err) { return next(err); }
-    if (request.statusCode === 403) {
-      return next(new Error('Invalid New York Times API Key'));
-    }
-    const books = JSON.parse(body).results;
-    res.render('api/nyt', {
-      title: 'New York Times API',
-      books
+  const apiKey = process.env.NYT_KEY;
+  axios.get(`http://api.nytimes.com/svc/books/v2/lists?list-name=young-adult&api-key=${apiKey}`)
+    .then((response) => {
+      const books = response.data.results;
+      res.render('api/nyt', {
+        title: 'New York Times API',
+        books
+      });
+    })
+    .catch((err) => {
+      const message = JSON.stringify(err.response.data.fault);
+      next(new Error(`New York Times API - ${err.response.status} ${err.response.statusText} ${message}`));
     });
-  });
 };
 
 /**
@@ -231,7 +233,7 @@ exports.getLastfm = async (req, res, next) => {
       console.error(err);
       // see error code list: https://www.last.fm/api/errorcodes
       switch (err.error) {
-        // potentially handle each code uniquely
+      // potentially handle each code uniquely
         case 10: // Invalid API key
           res.render('api/lastfm', {
             error: err
@@ -253,7 +255,7 @@ exports.getLastfm = async (req, res, next) => {
  * Twitter API example.
  */
 exports.getTwitter = async (req, res, next) => {
-  const token = req.user.tokens.find(token => token.kind === 'twitter');
+  const token = req.user.tokens.find((token) => token.kind === 'twitter');
   const T = new Twit({
     consumer_key: process.env.TWITTER_KEY,
     consumer_secret: process.env.TWITTER_SECRET,
@@ -280,16 +282,15 @@ exports.getTwitter = async (req, res, next) => {
  * Post a tweet.
  */
 exports.postTwitter = (req, res, next) => {
-  req.assert('tweet', 'Tweet cannot be empty').notEmpty();
+  const validationErrors = [];
+  if (validator.isEmpty(req.body.tweet)) validationErrors.push({ msg: 'Tweet cannot be empty' });
 
-  const errors = req.validationErrors();
-
-  if (errors) {
-    req.flash('errors', errors);
+  if (validationErrors.length) {
+    req.flash('errors', validationErrors);
     return res.redirect('/api/twitter');
   }
 
-  const token = req.user.tokens.find(token => token.kind === 'twitter');
+  const token = req.user.tokens.find((token) => token.kind === 'twitter');
   const T = new Twit({
     consumer_key: process.env.TWITTER_KEY,
     consumer_secret: process.env.TWITTER_SECRET,
@@ -310,55 +311,71 @@ exports.postTwitter = (req, res, next) => {
 exports.getSteam = async (req, res, next) => {
   const steamId = req.user.steam;
   const params = { l: 'english', steamid: steamId, key: process.env.STEAM_KEY };
-  const getAsync = promisify(request.get);
 
-  // get the list of the recently played games, pick the most recent one and get its achievements
-  const getPlayerAchievements = () =>
-    getAsync({ url: 'http://api.steampowered.com/IPlayerService/GetRecentlyPlayedGames/v0001/', qs: params, json: true })
-      .then(({ request, body }) => {
-        if (request.statusCode === 401) {
-          throw new Error('Invalid Steam API Key');
+  // makes a url with search query
+  const makeURL = (baseURL, params) => {
+    const url = new URL(baseURL);
+    const urlParams = new URLSearchParams(params);
+    url.search = urlParams.toString();
+    return url.toString();
+  };
+    // get the list of the recently played games, pick the most recent one and get its achievements
+  const getPlayerAchievements = () => {
+    const recentGamesURL = makeURL('http://api.steampowered.com/IPlayerService/GetRecentlyPlayedGames/v0001/', params);
+    return axios.get(recentGamesURL)
+      .then(({ data }) => {
+        // handle if player owns no games
+        if (Object.keys(data.response).length === 0) {
+          return null;
         }
-        if (body.response.total_count > 0) {
-          params.appid = body.response.games[0].appid;
-          return getAsync({ url: 'http://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/', qs: params, json: true })
-            .then(({ request, body }) => {
-              if (request.statusCode === 401) {
-                throw new Error('Invalid Steam API Key');
-              }
-              return body;
-            });
+        // handle if there are no recently played games
+        if (data.response.total_count === 0) {
+          return null;
         }
+        params.appid = data.response.games[0].appid;
+        const achievementsURL = makeURL('http://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/', params);
+        return axios.get(achievementsURL)
+          .then(({ data }) => {
+            // handle if there are no achievements for most recent game
+            if (!data.playerstats.achievements) {
+              return null;
+            }
+            return data.playerstats;
+          });
+      })
+      .catch((err) => {
+        if (err.response) {
+          // handle private profile or invalid key
+          if (err.response.status === 403) {
+            return null;
+          }
+        }
+        return Promise.reject(new Error('There was an error while getting achievements'));
       });
+  };
   const getPlayerSummaries = () => {
     params.steamids = steamId;
-    return getAsync({ url: 'http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/', qs: params, json: true })
-      .then(({ request, body }) => {
-        if (request.statusCode === 401) {
-          throw Error('Missing or Invalid Steam API Key');
-        }
-        return body;
-      });
+    const url = makeURL('http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/', params);
+    return axios.get(url)
+      .then(({ data }) => data)
+      .catch(() => Promise.reject(new Error('There was an error while getting player summary')));
   };
   const getOwnedGames = () => {
     params.include_appinfo = 1;
     params.include_played_free_games = 1;
-    return getAsync({ url: 'http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/', qs: params, json: true })
-      .then(({ request, body }) => {
-        if (request.statusCode === 401) {
-          throw new Error('Missing or Invalid Steam API Key');
-        }
-        return body;
-      });
+    const url = makeURL('http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/', params);
+    return axios.get(url)
+      .then(({ data }) => data)
+      .catch(() => Promise.reject(new Error('There was an error while getting owned games')));
   };
   try {
-    const playerAchievements = await getPlayerAchievements();
+    const playerstats = await getPlayerAchievements();
     const playerSummaries = await getPlayerSummaries();
     const ownedGames = await getOwnedGames();
     res.render('api/steam', {
       title: 'Steam Web API',
       ownedGames: ownedGames.response,
-      playerAchievemments: playerAchievements ? playerAchievements.playerstats : null,
+      playerAchievements: playerstats,
       playerSummary: playerSummaries.response.players[0]
     });
   } catch (err) {
@@ -413,13 +430,12 @@ exports.getTwilio = (req, res) => {
  * Send a text message using Twilio.
  */
 exports.postTwilio = (req, res, next) => {
-  req.assert('number', 'Phone number is required.').notEmpty();
-  req.assert('message', 'Message cannot be blank.').notEmpty();
+  const validationErrors = [];
+  if (validator.isEmpty(req.body.number)) validationErrors.push({ msg: 'Phone number is required.' });
+  if (validator.isEmpty(req.body.message)) validationErrors.push({ msg: 'Message cannot be blank.' });
 
-  const errors = req.validationErrors();
-
-  if (errors) {
-    req.flash('errors', errors);
+  if (validationErrors.length) {
+    req.flash('errors', validationErrors);
     return res.redirect('/api/twilio');
   }
 
@@ -432,6 +448,37 @@ exports.postTwilio = (req, res, next) => {
     req.flash('success', { msg: `Text send to ${sentMessage.to}` });
     res.redirect('/api/twilio');
   }).catch(next);
+};
+
+/**
+ * Get /api/twitch
+ */
+exports.getTwitch = async (req, res, next) => {
+  const token = req.user.tokens.find((token) => token.kind === 'twitch');
+  const twitchID = req.user.twitch;
+
+  const getUser = (userID) =>
+    axios.get(`https://api.twitch.tv/helix/users?id=${userID}`, { headers: { Authorization: `Bearer ${token.accessToken}` } })
+      .then(({ data }) => data)
+      .catch((err) => Promise.reject(new Error(`There was an error while getting user data ${err}`)));
+  const getFollowers = () =>
+    axios.get(`https://api.twitch.tv/helix/users/follows?to_id=${twitchID}`, { headers: { Authorization: `Bearer ${token.accessToken}` } })
+      .then(({ data }) => data)
+      .catch((err) => Promise.reject(new Error(`There was an error while getting followers ${err}`)));
+
+  try {
+    const yourTwitchUser = await getUser(twitchID);
+    const otherTwitchUser = await getUser(44322889);
+    const twitchFollowers = await getFollowers();
+    res.render('api/twitch', {
+      title: 'Twitch API',
+      yourTwitchUserData: yourTwitchUser.data[0],
+      otherTwitchUserData: otherTwitchUser.data[0],
+      twitchFollowers,
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 /**
@@ -461,20 +508,36 @@ exports.postClockwork = (req, res, next) => {
   });
 };
 
+
 /**
- * GET /api/linkedin
- * LinkedIn API example.
+ * GET /api/chart
+ * Chart example.
  */
-exports.getLinkedin = (req, res, next) => {
-  const token = req.user.tokens.find(token => token.kind === 'linkedin');
-  const linkedin = Linkedin.init(token.accessToken);
-  linkedin.people.me((err, $in) => {
-    if (err) { return next(err); }
-    res.render('api/linkedin', {
-      title: 'LinkedIn API',
-      profile: $in
+exports.getChart = async (req, res, next) => {
+  const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=MSFT&outputsize=compact&apikey=${process.env.ALPHA_VANTAGE_KEY}`;
+  axios.get(url)
+    .then((response) => {
+      const arr = response.data['Time Series (Daily)'];
+      let dates = [];
+      let closing = []; // stock closing value
+      const keys = Object.getOwnPropertyNames(arr);
+      for (let i = 0; i < 100; i++) {
+        dates.push(keys[i]);
+        closing.push(arr[keys[i]]['4. close']);
+      }
+      // reverse so dates appear from left to right
+      dates.reverse();
+      closing.reverse();
+      dates = JSON.stringify(dates);
+      closing = JSON.stringify(closing);
+      res.render('api/chart', {
+        title: 'Chart',
+        dates,
+        closing
+      });
+    }).catch((err) => {
+      next(err);
     });
-  });
 };
 
 /**
@@ -482,20 +545,14 @@ exports.getLinkedin = (req, res, next) => {
  * Instagram API example.
  */
 exports.getInstagram = async (req, res, next) => {
-  const token = req.user.tokens.find(token => token.kind === 'instagram');
+  const token = req.user.tokens.find((token) => token.kind === 'instagram');
   ig.use({ client_id: process.env.INSTAGRAM_ID, client_secret: process.env.INSTAGRAM_SECRET });
   ig.use({ access_token: token.accessToken });
   try {
-    const userSearchAsync = promisify(ig.user_search);
-    const userAsync = promisify(ig.user);
     const userSelfMediaRecentAsync = promisify(ig.user_self_media_recent);
-    const searchByUsername = await userSearchAsync('richellemead');
-    const searchByUserId = await userAsync('175948269');
     const myRecentMedia = await userSelfMediaRecentAsync();
     res.render('api/instagram', {
       title: 'Instagram API',
-      usernames: searchByUsername,
-      userById: searchByUserId,
       myRecentMedia
     });
   } catch (error) {
@@ -577,14 +634,55 @@ exports.getPayPalCancel = (req, res) => {
  * GET /api/lob
  * Lob API example.
  */
-exports.getLob = (req, res, next) => {
-  lob.usZipLookups.lookup({ zip_code: '94107' }, (err, zipdetails) => {
-    if (err) { return next(err); }
+exports.getLob = async (req, res, next) => {
+  let recipientName;
+  if (req.user) { recipientName = req.user.profile.name; } else { recipientName = 'John Doe'; }
+  const addressTo = {
+    name: recipientName,
+    address_line1: '123 Main Street',
+    address_city: 'New York',
+    address_state: 'NY',
+    address_zip: '94107'
+  };
+  const addressFrom = {
+    name: 'Hackathon Starter',
+    address_line1: '123 Test Street',
+    address_line2: 'Unit 200',
+    address_city: 'Chicago',
+    address_state: 'IL',
+    address_zip: '60012',
+    address_country: 'US'
+  };
+
+  const lookupZip = () => lob.usZipLookups.lookup({ zip_code: '94107' })
+    .then((zipdetails) => (zipdetails))
+    .catch((error) => Promise.reject(new Error(`Could not get zip code details: ${error}`)));
+
+  const createAndMailLetter = () => lob.letters.create({
+    description: 'My First Class Letter',
+    to: addressTo,
+    from: addressFrom,
+    // file: minified version of https://github.com/lob/lob-node/blob/master/examples/html/letter.html with slight changes as an example
+    file: `<html><head><meta charset="UTF-8"><style>body{width:8.5in;height:11in;margin:0;padding:0}.page{page-break-after:always;position:relative;width:8.5in;height:11in}.page-content{position:absolute;width:8.125in;height:10.625in;left:1in;top:1in}.text{position:relative;left:20px;top:3in;width:6in;font-size:14px}</style></head>
+          <body><div class="page"><div class="page-content"><div class="text">
+          Hello ${addressTo.name}, <p> We would like to welcome you to the community! Thanks for being a part of the team! <p><p> Cheer,<br>${addressFrom.name}
+          </div></div></div></body></html>`,
+    color: false
+  })
+    .then((letter) => (letter))
+    .catch((error) => Promise.reject(new Error(`Could not create and send letter: ${error}`)));
+
+  try {
+    const uspsLetter = await createAndMailLetter();
+    const zipDetails = await lookupZip();
     res.render('api/lob', {
       title: 'Lob API',
-      zipdetails,
+      zipDetails,
+      uspsLetter,
     });
-  });
+  } catch (error) {
+    next(error);
+  }
 };
 
 /**
@@ -608,33 +706,34 @@ exports.postFileUpload = (req, res) => {
  * Pinterest API example.
  */
 exports.getPinterest = (req, res, next) => {
-  const token = req.user.tokens.find(token => token.kind === 'pinterest');
-  request.get({ url: 'https://api.pinterest.com/v1/me/boards/', qs: { access_token: token.accessToken }, json: true }, (err, request, body) => {
-    if (err) { return next(err); }
-    res.render('api/pinterest', {
-      title: 'Pinterest API',
-      boards: body.data
+  const token = req.user.tokens.find((token) => token.kind === 'pinterest');
+  axios.get(`https://api.pinterest.com/v1/me/boards?access_token=${token.accessToken}`)
+    .then((response) => {
+      res.render('api/pinterest', {
+        title: 'Pinterest API',
+        boards: response.data.data
+      });
+    })
+    .catch((error) => {
+      next(error);
     });
-  });
 };
-
 /**
  * POST /api/pinterest
  * Create a pin.
  */
 exports.postPinterest = (req, res, next) => {
-  req.assert('board', 'Board is required.').notEmpty();
-  req.assert('note', 'Note cannot be blank.').notEmpty();
-  req.assert('image_url', 'Image URL cannot be blank.').notEmpty();
+  const validationErrors = [];
+  if (validator.isEmpty(req.body.board)) validationErrors.push({ msg: 'Board is required.' });
+  if (validator.isEmpty(req.body.note)) validationErrors.push({ msg: 'Note cannot be blank.' });
+  if (validator.isEmpty(req.body.image_url)) validationErrors.push({ msg: 'Image URL cannot be blank.' });
 
-  const errors = req.validationErrors();
-
-  if (errors) {
-    req.flash('errors', errors);
+  if (validationErrors.length) {
+    req.flash('errors', validationErrors);
     return res.redirect('/api/pinterest');
   }
 
-  const token = req.user.tokens.find(token => token.kind === 'pinterest');
+  const token = req.user.tokens.find((token) => token.kind === 'pinterest');
   const formData = {
     board: req.body.board,
     note: req.body.note,
@@ -642,14 +741,34 @@ exports.postPinterest = (req, res, next) => {
     image_url: req.body.image_url
   };
 
-  request.post('https://api.pinterest.com/v1/pins/', { qs: { access_token: token.accessToken }, form: formData }, (err, request, body) => {
-    if (err) { return next(err); }
-    if (request.statusCode !== 201) {
-      req.flash('errors', { msg: JSON.parse(body).message });
-      return res.redirect('/api/pinterest');
-    }
-    req.flash('success', { msg: 'Pin created' });
-    res.redirect('/api/pinterest');
+  axios.post(`https://api.pinterest.com/v1/pins/?access_token=${token.accessToken}`, formData)
+    .then(() => {
+      req.flash('success', { msg: 'Pin created' });
+      res.redirect('/api/pinterest');
+    })
+    .catch((error) => {
+      req.flash('errors', { msg: error.response.data.message });
+      res.redirect('/api/pinterest');
+    });
+};
+
+exports.getHereMaps = (req, res) => {
+  const imageMapURL = `https://image.maps.api.here.com/mia/1.6/mapview?\
+app_id=${process.env.HERE_APP_ID}&app_code=${process.env.HERE_APP_CODE}&\
+poix0=47.6516216,-122.3498897;white;black;15;Fremont Troll&\
+poix1=47.6123335,-122.3314332;white;black;15;Seattle Art Museum&\
+poix2=47.6162956,-122.3555097;white;black;15;Olympic Sculpture Park&\
+poix3=47.6205099,-122.3514661;white;black;15;Space Needle&\
+c=47.6176371,-122.3344637&\
+u=1500&\
+vt=1&&z=13&\
+h=500&w=800&`;
+
+  res.render('api/here-maps', {
+    app_id: process.env.HERE_APP_ID,
+    app_code: process.env.HERE_APP_CODE,
+    title: 'Here Maps API',
+    imageMapURL
   });
 };
 
@@ -657,5 +776,60 @@ exports.getGoogleMaps = (req, res) => {
   res.render('api/google-maps', {
     title: 'Google Maps API',
     google_map_api_key: process.env.GOOGLE_MAP_API_KEY
+  });
+};
+
+exports.getGoogleDrive = (req, res) => {
+  const token = req.user.tokens.find((token) => token.kind === 'google');
+  const authObj = new google.auth.OAuth2({
+    access_type: 'offline'
+  });
+  authObj.setCredentials({
+    access_token: token.accessToken
+  });
+
+  const drive = google.drive({
+    version: 'v3',
+    auth: authObj
+  });
+
+  drive.files.list({
+    fields: 'files(iconLink, webViewLink, name)'
+  }, (err, response) => {
+    if (err) return console.log(`The API returned an error: ${err}`);
+    res.render('api/google-drive', {
+      title: 'Google Drive API',
+      files: response.data.files,
+    });
+  });
+};
+
+exports.getGoogleSheets = (req, res) => {
+  const token = req.user.tokens.find((token) => token.kind === 'google');
+  const authObj = new google.auth.OAuth2({
+    access_type: 'offline'
+  });
+  authObj.setCredentials({
+    access_token: token.accessToken
+  });
+
+  const sheets = google.sheets({
+    version: 'v4',
+    auth: authObj
+  });
+
+  const url = 'https://docs.google.com/spreadsheets/d/12gm6fRAp0bC8TB2vh7sSPT3V75Ug99JaA9L0PqiWS2s/edit#gid=0';
+  const re = /spreadsheets\/d\/([a-zA-Z0-9-_]+)/;
+  const id = url.match(re)[1];
+
+  sheets.spreadsheets.values.get({
+    spreadsheetId: id,
+    range: 'Class Data!A1:F',
+  }, (err, response) => {
+    if (err) return console.log(`The API returned an error: ${err}`);
+    res.render('api/google-sheets', {
+      title: 'Google Sheets API',
+      values: response.data.values,
+    });
   });
 };

@@ -1,6 +1,90 @@
 # Changelog
 ---------
 
+### 6.0.0 (January 2, 2020)
+- Dropped support for NodeJS 8.x, due to its EOL
+- Use HTML5 native client form validation (thanks to @peterblazejewicz)
+- Fix navbar rendering issues when using themes (thanks to @peterblazejewicz)
+- Fix button formatting issues when applying themes (thanks to @peterblazejewicz)
+- Fixed drop down menu to show correct formatting from the theme (thanks to @jonasroslund)
+- Config mongoose to use the new Server Discovery and Monitoring
+- Fix validation bug in Twitter, Pinterest, and Twilio API examples
+- Fix HERE icon in the API examples
+- Fix minor issues in Stripe and Lob API examples
+- Update dependencies
+- Update documentation (thanks in part to @noftaly, @yanivm)
+
+### 5.2.0 (July 28, 2019)
+- Added API example: Google Drive (thanks to @tanaydin)
+- Added Google Sheets API example (thanks to @clarkngo)
+- Added HERE Maps API example
+- Added support for Intuit Quickbooks API
+- Improved Lob.com API example
+- Added support for email verification
+- Added support for refreshing OAuth tokens
+- Fixed bug when users attempt to login by email for accounts that are created with a sign in provider
+- Fixed bug in the password reset
+- Added CSRF check to the File Upload API example -- security improvement -- breaking change
+- Added validation check to password reset token -- security improvement
+- Fixed missing await in the Foursquare API example
+- Fixed Google Oauth2 profile picture (thanks to @tanaydin)
+- Removed deprecated Instagram API calls -- breaking change
+- Upgrade to login by LinkedIn v2, remove LinkedIn API example -- breaking change
+- Removed express-validator in favor of validator.js -- breaking change
+- Removed Aviary API example since the service has been shutdown
+- Added additional unit tests for the user model (thanks to @Tolsee)
+- Updated Steam's logo
+- Updated dependencies
+- Updated documentation (thanks in part to @TheMissingNTLDR, @Coteh)
+
+### 5.1.4 (May 14, 2019)
+- Migrate from requestjs to axios (thanks to @FX-Wood)
+- Enable page templates to add items to the HTML head element
+- Fix bold font issue on macs (thanks to @neighlyd)
+- Use BASE_URL for github
+- Update min node engine to require Feb 2019 NodeJS security release
+- Add Node.js 12 to the travis build
+- Update dependencies
+- Update documentation (thanks in part to @anubhavsrivastava, @Fullchee, @luckymurari)
+
+### 5.1.3 (April 7, 2019)
+- Update Steam API Integration
+- Upgrade flatly theme files to 4.3.1
+- Migrate from bcrypt-nodejs to bcrypt
+- Use BASE_URL for twitter and facebook callbacks
+- Add a ChartJS example in combination with Alpha Vantage API usage (thanks to @T-travis)
+- Improve Github integration – use the user’s private email address if there is no public email listed (thanks to @danielhunt)
+- Improve the error handling for the NYT API Example
+- Add lodash 4.7
+- Fixed gender radio buttons spacing
+- Fixed alignment Issue for login / sign in buttons at certain screen widths. (thanks to @eric-sciberras)
+- Remove Mozilla Persona information from README since it has been deprecated
+- Remove utils
+- Remove GSDK since it does not support Bootstrap 4(thanks to @laurenquinn5924)
+- Adding additional tests to cover some of the API examples
+- Add prod-checklist.md
+- Update dependencies
+- Update documentation (thanks in part to @GregBrimble)
+
+### 5.1.2 (January 13, 2019)
+- Added Login by Snapchat (thanks to @nicholasgonzalezsc)
+- Migrate the Foursquare API example to use Axios calls instead of the npm library.
+- Fixed minor visual issue in the web scraping example.
+- Fixed issue with Popper.js integration (thanks to @binarymax and @Furchin)
+- Fixed wrapping issues in the navbar and logo indentation (thanks to @estevanmaito)
+- Fixed MongoDB deprecation warnings
+- Add production error handler middleware that returns 500 to handle errors.  Also, handle server errors in the lastfm API example (thanks to @jagatfx)
+- Added autocomplete properties to the views to address Chrome warnings (thanks to @peterblazejewicz)
+- Fixed issues in the unit tests.
+- Fixed issues in the modern theme variables and imports to be consistent (thanks to @monkeywithacupcake)
+- Upgraded to Fontawesome to the latest version (thanks in part to @gesa)
+- Upgraded eslint to v5.
+- Updated dependencies
+- Updated copyright year to include 2019
+- Minor code formatting improvements
+- Replaced mLab instructions with MongoDB Atlas instructions (thanks to @mgautam98)
+- Fixed issues in the readme (thanks to @nero-adaware , @empurium, @aschwtzr)
+
 ### 5.1.1 (July 5, 2018)
 - Upgraded FontAwesome to FontAwesome v5.1 - FontAwsome is now integrated using its npm package
 - Fixed bug with JS libraries missing in Windows Dev envs
